@@ -2,13 +2,18 @@ import express, { Response, Request } from "express"
 import dotenv from "dotenv"
 import http from "http"
 import cors from "cors"
+import connectDB from "./config/database"
 import { SocketEvent, SocketId } from "./types/socket"
 import { USER_CONNECTION_STATUS, User } from "./types/user"
 import { Server } from "socket.io"
 import path from "path"
+import { RoomService } from "./services/roomService"
+import { ChatService } from "./services/chatService"
 
 dotenv.config()
 
+// Connect to MongoDB
+connectDB()
 const app = express()
 
 app.use(express.json())
@@ -81,6 +86,42 @@ io.on("connection", (socket) => {
 		socket.broadcast.to(roomId).emit(SocketEvent.USER_JOINED, { user })
 		const users = getUsersInRoom(roomId)
 		io.to(socket.id).emit(SocketEvent.JOIN_ACCEPTED, { user, users })
+
+		// Load room data from database and send to user
+		RoomService.getRoomData(roomId).then(roomData => {
+			if (roomData) {
+				io.to(socket.id).emit(SocketEvent.SYNC_FILE_STRUCTURE, {
+					fileStructure: roomData.fileStructure,
+					openFiles: roomData.openFiles,
+					activeFile: roomData.activeFile,
+				})
+
+				if (roomData.drawingData) {
+					io.to(socket.id).emit(SocketEvent.SYNC_DRAWING, {
+						drawingData: roomData.drawingData
+					})
+				}
+			} else {
+				// Create new room with default structure
+				RoomService.createOrUpdateRoom(roomId)
+			}
+		})
+
+		// Load chat history
+		ChatService.getRoomMessages(roomId).then(messages => {
+			// Send messages in chronological order
+			const sortedMessages = messages.reverse()
+			sortedMessages.forEach(msg => {
+				io.to(socket.id).emit(SocketEvent.RECEIVE_MESSAGE, {
+					message: {
+						id: msg.messageId,
+						message: msg.message,
+						username: msg.username,
+						timestamp: msg.timestamp
+					}
+				})
+			})
+		})
 	})
 
 	socket.on("disconnecting", () => {
@@ -98,6 +139,12 @@ io.on("connection", (socket) => {
 	socket.on(
 		SocketEvent.SYNC_FILE_STRUCTURE,
 		({ fileStructure, openFiles, activeFile, socketId }) => {
+			const roomId = getRoomId(socket.id)
+			if (roomId) {
+				// Save to database
+				RoomService.createOrUpdateRoom(roomId, fileStructure, openFiles, activeFile)
+			}
+			
 			io.to(socketId).emit(SocketEvent.SYNC_FILE_STRUCTURE, {
 				fileStructure,
 				openFiles,
@@ -111,6 +158,15 @@ io.on("connection", (socket) => {
 		({ parentDirId, newDirectory }) => {
 			const roomId = getRoomId(socket.id)
 			if (!roomId) return
+			
+			// Update database with new directory structure
+			RoomService.getRoomData(roomId).then(roomData => {
+				if (roomData) {
+					// The file structure will be updated by the client
+					// We'll save it when SYNC_FILE_STRUCTURE is called
+				}
+			})
+			
 			socket.broadcast.to(roomId).emit(SocketEvent.DIRECTORY_CREATED, {
 				parentDirId,
 				newDirectory,
@@ -121,6 +177,9 @@ io.on("connection", (socket) => {
 	socket.on(SocketEvent.DIRECTORY_UPDATED, ({ dirId, children }) => {
 		const roomId = getRoomId(socket.id)
 		if (!roomId) return
+		
+		// The file structure will be updated when SYNC_FILE_STRUCTURE is called
+		
 		socket.broadcast.to(roomId).emit(SocketEvent.DIRECTORY_UPDATED, {
 			dirId,
 			children,
@@ -155,6 +214,30 @@ io.on("connection", (socket) => {
 	socket.on(SocketEvent.FILE_UPDATED, ({ fileId, newContent }) => {
 		const roomId = getRoomId(socket.id)
 		if (!roomId) return
+		
+		// Save file updates to database
+		RoomService.getRoomData(roomId).then(roomData => {
+			if (roomData) {
+				// Update the file content in the structure and save
+				const updateFileContent = (items: any[]): any[] => {
+					return items.map(item => {
+						if (item.id === fileId) {
+							return { ...item, content: newContent }
+						}
+						if (item.children) {
+							return { ...item, children: updateFileContent(item.children) }
+						}
+						return item
+					})
+				}
+
+				if (roomData.fileStructure.children) {
+					roomData.fileStructure.children = updateFileContent(roomData.fileStructure.children)
+					RoomService.updateFileStructure(roomId, roomData.fileStructure)
+				}
+			}
+		})
+		
 		socket.broadcast.to(roomId).emit(SocketEvent.FILE_UPDATED, {
 			fileId,
 			newContent,
@@ -205,6 +288,16 @@ io.on("connection", (socket) => {
 	socket.on(SocketEvent.SEND_MESSAGE, ({ message }) => {
 		const roomId = getRoomId(socket.id)
 		if (!roomId) return
+		
+		// Save message to database
+		ChatService.saveMessage(
+			roomId,
+			message.id,
+			message.message,
+			message.username,
+			message.timestamp
+		)
+		
 		socket.broadcast
 			.to(roomId)
 			.emit(SocketEvent.RECEIVE_MESSAGE, { message })
@@ -246,6 +339,12 @@ io.on("connection", (socket) => {
 	})
 
 	socket.on(SocketEvent.SYNC_DRAWING, ({ drawingData, socketId }) => {
+		const roomId = getRoomId(socket.id)
+		if (roomId && drawingData) {
+			// Save drawing data to database
+			RoomService.updateDrawingData(roomId, drawingData)
+		}
+		
 		socket.broadcast
 			.to(socketId)
 			.emit(SocketEvent.SYNC_DRAWING, { drawingData })
@@ -254,6 +353,15 @@ io.on("connection", (socket) => {
 	socket.on(SocketEvent.DRAWING_UPDATE, ({ snapshot }) => {
 		const roomId = getRoomId(socket.id)
 		if (!roomId) return
+		
+		// Update drawing data in database
+		RoomService.getRoomData(roomId).then(roomData => {
+			if (roomData) {
+				// Update drawing data with the new snapshot
+				RoomService.updateDrawingData(roomId, snapshot)
+			}
+		})
+		
 		socket.broadcast.to(roomId).emit(SocketEvent.DRAWING_UPDATE, {
 			snapshot,
 		})
