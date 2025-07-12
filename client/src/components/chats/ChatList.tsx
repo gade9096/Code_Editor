@@ -9,6 +9,7 @@ function ChatList() {
         setIsNewMessage,
         lastScrollHeight,
         setLastScrollHeight,
+        isLoadingHistory,
     } = useChatRoom()
     const { currentUser } = useAppContext()
     const messagesContainerRef = useRef<HTMLDivElement | null>(null)
@@ -39,6 +40,11 @@ function ChatList() {
             ref={messagesContainerRef}
             onScroll={handleScroll}
         >
+            {isLoadingHistory && (
+                <div className="mb-2 text-center text-sm text-gray-400">
+                    Loading chat history...
+                </div>
+            )}
             {/* Chat messages */}
             {messages.map((message, index) => {
                 return (
@@ -63,6 +69,11 @@ function ChatList() {
                     </div>
                 )
             })}
+            {messages.length === 0 && !isLoadingHistory && (
+                <div className="text-center text-sm text-gray-400">
+                    No messages yet. Start the conversation!
+                </div>
+            )}
         </div>
     )
 }

@@ -24,6 +24,22 @@ function ChatContextProvider({ children }: { children: ReactNode }) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [isNewMessage, setIsNewMessage] = useState<boolean>(false)
     const [lastScrollHeight, setLastScrollHeight] = useState<number>(0)
+    const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false)
+
+    // Handle loading chat history from MongoDB
+    const handleChatHistory = useCallback(
+        ({ messages: historyMessages }: { messages: ChatMessage[] }) => {
+            setMessages(historyMessages)
+            setIsLoadingHistory(false)
+        },
+        [],
+    )
+
+    // Request chat history when joining room
+    const requestChatHistory = useCallback(() => {
+        setIsLoadingHistory(true)
+        socket.emit(SocketEvent.REQUEST_CHAT_HISTORY)
+    }, [socket])
 
     useEffect(() => {
         socket.on(
@@ -33,10 +49,14 @@ function ChatContextProvider({ children }: { children: ReactNode }) {
                 setIsNewMessage(true)
             },
         )
+        
+        socket.on(SocketEvent.CHAT_HISTORY, handleChatHistory)
+        
         return () => {
             socket.off(SocketEvent.RECEIVE_MESSAGE)
+            socket.off(SocketEvent.CHAT_HISTORY)
         }
-    }, [socket])
+    }, [socket, handleChatHistory])
 
     return (
         <ChatContext.Provider
@@ -47,6 +67,8 @@ function ChatContextProvider({ children }: { children: ReactNode }) {
                 setIsNewMessage,
                 lastScrollHeight,
                 setLastScrollHeight,
+                isLoadingHistory,
+                requestChatHistory,
             }}
         >
             {children}

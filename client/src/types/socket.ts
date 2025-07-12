@@ -20,6 +20,8 @@ enum SocketEvent {
     USER_ONLINE = "online",
     SEND_MESSAGE = "send-message",
     RECEIVE_MESSAGE = "receive-message",
+    REQUEST_CHAT_HISTORY = "request-chat-history",
+    CHAT_HISTORY = "chat-history",
     TYPING_START = "typing-start",
     TYPING_PAUSE = "typing-pause",
     USERNAME_EXISTS = "username-exists",

@@ -634,7 +634,7 @@ function FileContextProvider({ children }: { children: ReactNode }) {
         ({ user }: { user: RemoteUser }) => {
             toast.success(`${user.username} joined the room`)
 
-            // Send the code and drawing data to the server
+            // Send the current state to the new user (data will be loaded from MongoDB)
             socket.emit(SocketEvent.SYNC_FILE_STRUCTURE, {
                 fileStructure,
                 openFiles,
@@ -662,10 +662,12 @@ function FileContextProvider({ children }: { children: ReactNode }) {
             openFiles: FileSystemItem[]
             activeFile: FileSystemItem | null
         }) => {
+            // Update local state with data from MongoDB
             setFileStructure(fileStructure)
             setOpenFiles(openFiles)
             setActiveFile(activeFile)
             toast.dismiss()
+            toast.success("Room data loaded successfully")
         },
         [],
     )

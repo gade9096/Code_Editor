@@ -1,9 +1,17 @@
 import ChatInput from "@/components/chats/ChatInput"
 import ChatList from "@/components/chats/ChatList"
+import { useChatRoom } from "@/context/ChatContext"
 import useResponsive from "@/hooks/useResponsive"
+import { useEffect } from "react"
 
 const ChatsView = () => {
     const { viewHeight } = useResponsive()
+    const { requestChatHistory } = useChatRoom()
+
+    // Request chat history when component mounts
+    useEffect(() => {
+        requestChatHistory()
+    }, [requestChatHistory])
 
     return (
         <div

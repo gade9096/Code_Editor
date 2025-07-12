@@ -27,6 +27,7 @@ function FileStructureView() {
     const explorerRef = useRef<HTMLDivElement | null>(null)
     const [selectedDirId, setSelectedDirId] = useState<Id | null>(null)
     const { minHeightReached } = useResponsive()
+    const [isLoading, setIsLoading] = useState<boolean>(false)
 
     const handleClickOutside = (e: MouseEvent) => {
         if (
@@ -40,16 +41,20 @@ function FileStructureView() {
     const handleCreateFile = () => {
         const fileName = prompt("Enter file name")
         if (fileName) {
+            setIsLoading(true)
             const parentDirId: Id = selectedDirId || fileStructure.id
             createFile(parentDirId, fileName)
+            setIsLoading(false)
         }
     }
 
     const handleCreateDirectory = () => {
         const dirName = prompt("Enter directory name")
         if (dirName) {
+            setIsLoading(true)
             const parentDirId: Id = selectedDirId || fileStructure.id
             createDirectory(parentDirId, dirName)
+            setIsLoading(false)
         }
     }
 
@@ -64,6 +69,7 @@ function FileStructureView() {
                         className="rounded-md px-1 hover:bg-darkHover"
                         onClick={handleCreateFile}
                         title="Create File"
+                        disabled={isLoading}
                     >
                         <RiFileAddLine size={20} />
                     </button>
@@ -71,6 +77,7 @@ function FileStructureView() {
                         className="rounded-md px-1 hover:bg-darkHover"
                         onClick={handleCreateDirectory}
                         title="Create Directory"
+                        disabled={isLoading}
                     >
                         <RiFolderAddLine size={20} />
                     </button>
@@ -93,6 +100,11 @@ function FileStructureView() {
                 )}
                 ref={explorerRef}
             >
+                {isLoading && (
+                    <div className="text-center text-sm text-gray-400 p-4">
+                        Syncing with database...
+                    </div>
+                )}
                 {sortedFileStructure.children &&
                     sortedFileStructure.children.map((item) => (
                         <Directory
